@@ -54,6 +54,19 @@ On startup the backend creates its own tables and seeds 20 question sets × 20 p
 3. **Set health** tab → confirm all 20 sets are READY.
 4. `GET /api/health` should return `{"status":"ok","database":"postgresql","question_sets":20}`.
 
+## Already wired up for this project
+
+The app is currently pointed at the Supabase project `arfywtfdaovlrzjhqmdq` (Mumbai) using the **transaction pooler**:
+
+```
+DATABASE_URL='postgresql://postgres.arfywtfdaovlrzjhqmdq:<your-password>@aws-0-ap-south-1.pooler.supabase.com:6543/postgres'
+```
+
+Two gotchas worth remembering:
+
+- The **direct** host `db.<ref>.supabase.co` is IPv6-only on new Supabase projects. Most hosting containers are IPv4-only, so that host fails with "No address associated with hostname". Always use the `...pooler.supabase.com` host.
+- The password contains a `$`, so wrap the value in **single quotes** in `.env` files to stop shells and dotenv from touching it.
+
 ## Notes
 
 - Free tier is plenty for one event (500 MB, ~200 pooled connections). 5,000 participants × 21 rows each is a few MB.

@@ -33,6 +33,7 @@ def _build_url_and_args(raw: str):
     if "pooler" in host or "pgbouncer" in host:
         connect_args["statement_cache_size"] = 0
         connect_args["prepared_statement_cache_size"] = 0
+        connect_args["server_settings"] = {"jit": "off"}
     return url, connect_args
 
 
