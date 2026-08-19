@@ -31,6 +31,7 @@ def parse_questions(raw: str):
             elif m_opt and not options.get(m_opt.group(1).upper()):
                 options[m_opt.group(1).upper()] = m_opt.group(2).strip()
             elif not options:
+                line = re.sub(r"^(?:question|qn|ques)\s*[:\-.]\s*", "", line, flags=re.I)
                 q_lines.append(re.sub(r"^(?:Q\s*)?\d+[\)\.\:]\s*", "", line, flags=re.I))
             else:
                 errors.append(f"Block {bi}: unrecognised line -> {line[:60]!r}")

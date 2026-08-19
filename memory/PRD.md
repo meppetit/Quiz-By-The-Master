@@ -30,6 +30,8 @@ Server-side scoring/time, no answer leakage, one attempt per person, least-loade
 - **Live leaderboard**: `/admin/live` full-screen projector view, ranked score/time rows, 5s auto-refresh (paused when tab hidden), native fullscreen toggle.
 - **Deployment**: `/app/DEPLOYMENT.md` guide + `/app/deploy/` (docker-compose with tuned Postgres + PgBouncer transaction pooling, gunicorn/uvicorn 4-worker backend image, nginx with rate-limited `/api/register` and static caching).
 
+- **Real content loaded (2026-06)**: all 400 questions from the user's "Question Bank 400 Qns.docx" imported into the 20 sets via `/app/scripts/import_question_bank.py` (docx paragraphs use `<w:br>` inside a single `<w:p>` — the extractor splits on those). The source key was heavily A-biased (sets 10–20 were 100% A), so option order was shuffled once in place with `/app/scripts/shuffle_options.py` (correct answer tracked, wording untouched): key spread is now A131/B103/C89/D77 and an all-A run scores ~7/20.
+
 ## Backlog
 - P0: import the real 400-question document (20 sets × 20) via the admin paste/upload panel; then remove seeded placeholders.
 - P1: deployment hardening for the burst (multiple uvicorn workers/replicas, PgBouncer, explicit CORS origins instead of `*`).
