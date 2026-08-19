@@ -1,0 +1,100 @@
+{
+  "theme": "dark",
+  "typography": {
+    "headings": {
+      "font": "Outfit, sans-serif",
+      "classes": "font-black tracking-tighter text-white",
+      "hierarchy": {
+        "h1": "text-4xl sm:text-5xl",
+        "h2": "text-2xl sm:text-3xl",
+        "h3": "text-xl sm:text-2xl"
+      }
+    },
+    "body": {
+      "font": "DM Sans, sans-serif",
+      "classes": "text-base text-zinc-300 leading-relaxed"
+    },
+    "labels": {
+      "classes": "text-xs font-bold tracking-[0.15em] text-zinc-500 uppercase"
+    }
+  },
+  "colors": {
+    "background": "#09090b",
+    "surface": "#121214",
+    "surface_hover": "#1f1f22",
+    "primary": "#C6F24E",
+    "primary_foreground": "#000000",
+    "border": "#27272a",
+    "muted": "#a1a1aa",
+    "destructive": "#ef4444"
+  },
+  "visual_enhancers": {
+    "background_texture": "Subtle CSS grid texture. Add a fixed div with background-image: radial-gradient(#27272a 1px, transparent 1px); background-size: 24px 24px; opacity: 0.3; pointer-events: none;",
+    "shadows": "Glow effect for primary actions: shadow-[0_0_15px_rgba(198,242,78,0.3)]",
+    "borders": "1px solid border-zinc-800 for cards, inputs, and unselected options."
+  },
+  "layouts": {
+    "participant_screens": {
+      "strategy": "Mobile-first (~360–430px) optimized. Use max-w-md mx-auto min-h-screen relative to create an app-like frame.",
+      "spacing": "Generous vertical padding. p-6 or p-8 for main containers.",
+      "header": "Minimal absolute/fixed header. 'MEP QUIZ' wordmark (top-left) in Outfit font + 'LIVE' pill (top-right, bg-red-500 text-white rounded-full px-3 py-1 text-xs font-bold)."
+    },
+    "admin_dashboard": {
+      "strategy": "Desktop-only. High-density data layout. Minimalist Sidebar.",
+      "grid": "Bento-style or strict table layout. Use grid-cols-1 md:grid-cols-4 for stat cards.",
+      "surfaces": "Use flat solid surfaces, NO glassmorphism for data tables to ensure maximum legibility."
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "w-full rounded-full bg-[#C6F24E] text-black font-bold h-14 text-lg flex items-center justify-center gap-2 hover:bg-[#d4f570] transition-colors hover:shadow-[0_0_20px_rgba(198,242,78,0.4)]",
+      "secondary": "rounded-full bg-zinc-800 text-white font-medium h-12 px-6 hover:bg-zinc-700 transition-colors"
+    },
+    "inputs": {
+      "style": "bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 focus:border-[#C6F24E] focus:ring-1 focus:ring-[#C6F24E] transition-all outline-none"
+    },
+    "cards": {
+      "form_card": "bg-[#121214] border border-zinc-800/60 rounded-[24px] p-6 shadow-xl"
+    },
+    "quiz_options": {
+      "default": "flex items-center w-full p-4 border border-zinc-800 rounded-2xl cursor-pointer hover:border-zinc-600 transition-colors bg-[#09090b] group",
+      "selected": "flex items-center w-full p-4 border border-[#C6F24E] rounded-2xl cursor-pointer bg-[#C6F24E]/10 transition-colors",
+      "letter_badge_default": "w-8 h-8 rounded-lg bg-zinc-800 text-zinc-400 flex items-center justify-center font-bold text-sm mr-4 group-hover:text-white transition-colors",
+      "letter_badge_selected": "w-8 h-8 rounded-lg bg-[#C6F24E] text-black flex items-center justify-center font-bold text-sm mr-4",
+      "radio_indicator_default": "ml-auto w-5 h-5 rounded-full border-2 border-zinc-600",
+      "radio_indicator_selected": "ml-auto w-5 h-5 rounded-full border-2 border-[#C6F24E] flex items-center justify-center after:content-[''] after:w-2.5 after:h-2.5 after:bg-[#C6F24E] after:rounded-full"
+    },
+    "progress_bar": {
+      "container": "w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden",
+      "fill": "h-full bg-[#C6F24E] rounded-full transition-all duration-300 ease-out"
+    }
+  },
+  "motion": {
+    "transitions": "Use transition-all duration-200 ease-out for hover states and option selections.",
+    "page_load": "Fade in and slight slide up (translate-y-4 to 0, opacity 0 to 1) for form cards and quiz questions."
+  },
+  "accessibility": {
+    "contrast": "Ensure white text on #09090b and black text on #C6F24E meet WCAG AA.",
+    "focus": "All interactive elements MUST have a focus state, ideally a ring using the primary lime color.",
+    "data_testid": "MANDATORY. Add data-testid attributes to all inputs, buttons, and quiz options."
+  },
+  "instructions_to_main_agent": [
+    "Initialize Tailwind configured strictly for dark mode. Set body bg to #09090b and text to white.",
+    "Import Google Fonts 'Outfit' (headings) and 'DM Sans' (body) in your CSS/HTML.",
+    "Implement the background grid texture as a fixed overlay behind the main content.",
+    "For the participant screens (Registration, Quiz, Completion), lock the max-width to 430px (e.g., max-w-md mx-auto) to mimic the mobile app feel on web.",
+    "Registration screen: Map strictly to user fields (Name, Email, Phone required, School optional). Use the specific uppercase muted labels and dark rounded inputs.",
+    "Quiz screen: Header needs 'QUESTION X OF 20', right aligned percentage. Question card with category chip. Options A/B/C/D. Timer top-right.",
+    "Admin dashboard: Build a responsive desktop layout using Shadcn UI components. Ensure tables are sortable/searchable. Include CSV export functionality.",
+    "Do NOT use HTML <select> or <input type='date'>. Use Shadcn components for complex interactions.",
+    "Include 'data-testid' attributes on ALL interactive elements."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic outputs. DO NOT create a generic light-mode SaaS look. Stick STRICTLY to the dark neon/tactical aesthetic.",
+    "Never center align the entire app container text. Left-align inputs, labels, and paragraph text.",
+    "Never use AI emoji characters for icons. Use 'lucide-react' icons.",
+    "Use 2-3x more spacing than feels comfortable. Use generous padding in cards and between sections.",
+    "Include micro-animations for hover states and selection.",
+    "Make sure error boundaries and loading states are themed properly (lime spinners, minimal text)."
+  ]
+}
