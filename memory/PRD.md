@@ -32,6 +32,8 @@ Server-side scoring/time, no answer leakage, one attempt per person, least-loade
 
 - **Real content loaded (2026-06)**: all 400 questions from the user's "Question Bank 400 Qns.docx" imported into the 20 sets via `/app/scripts/import_question_bank.py` (docx paragraphs use `<w:br>` inside a single `<w:p>` — the extractor splits on those). The source key was heavily A-biased (sets 10–20 were 100% A), so option order was shuffled once in place with `/app/scripts/shuffle_options.py` (correct answer tracked, wording untouched): key spread is now A131/B103/C89/D77 and an all-A run scores ~7/20.
 
+- **Performance fix (2026-06)**: the Supabase DB is in Mumbai while the preview backend runs in the US (~460 ms per query), so the hot paths were collapsed to one statement each — `REGISTER_SQL` (participant + locked least-loaded set pick + counter bump + attempt in one CTE), `NEXT_QUESTION_SQL`, `ANSWER_SQL` (grades in SQL and returns the next question) and `FINALIZE_SQL` — served on an AUTOCOMMIT session (`get_fast_session`) so there is no extra BEGIN/COMMIT round-trip, and `pool_pre_ping` was dropped. The quiz UI now makes one request per question. Result: ~8.5 s -> ~0.6 s per question, full run 171 s -> ~14 s. Co-locating the backend with the DB region removes nearly all remaining latency (documented in DEPLOYMENT.md §2.5).
+
 ## Backlog
 - P0: import the real 400-question document (20 sets × 20) via the admin paste/upload panel; then remove seeded placeholders.
 - P1: deployment hardening for the burst (multiple uvicorn workers/replicas, PgBouncer, explicit CORS origins instead of `*`).

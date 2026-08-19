@@ -8,7 +8,7 @@ from urllib.request import urlopen
 
 import requests
 
-DOCX_URL = sys.argv[1]
+DOCX_URL = sys.argv[1] if len(sys.argv) > 1 else None
 API = os.environ["API"]
 ADMIN = {"username": os.environ.get("ADMIN_USERNAME", "admin"),
          "password": os.environ.get("ADMIN_PASSWORD", "mepquiz2026")}
@@ -75,4 +75,5 @@ def main():
     print("TOTAL imported:", total_ok)
 
 
-main()
+if __name__ == "__main__":
+    main()
