@@ -17,6 +17,7 @@ Mobile-web live-event quiz app. PostgreSQL is a hard requirement. Participant fl
 Server-side scoring/time, no answer leakage, one attempt per person, least-loaded set assignment safe under bursts, mobile-first participant UI matching supplied screenshots, desktop admin.
 
 ## Implemented (2026-06)
+- **Deployment note**: Emergent-native deploy provisions MongoDB only, so this app (PostgreSQL hard requirement) must deploy on a Postgres-friendly host with an external managed Postgres (`DATABASE_URL`). Mongo leftovers (MONGO_URL/DB_NAME env, motor/pymongo deps) removed; `db.py` normalises any Postgres URL for asyncpg (SSL for remote hosts, pooler-safe statement caching); `GET /api/health` added for platform probes. Guides: `/app/DEPLOYMENT.md`, `/app/SUPABASE_SETUP.md`.
 - Registration with validation + duplicate email/phone 409 with clear message.
 - Least-loaded set assignment via `FOR UPDATE SKIP LOCKED` on question_sets + atomic attempt_count, with retry/backoff. Verified: 35 concurrent registrations → per-set skew of 1.
 - Quiz: server-driven single-question endpoint (no correct_option, no sibling questions), answer logging, resume from started_at on refresh, count-up timer, progress bar.

@@ -146,6 +146,13 @@ async def root():
     return {"service": "MEP Quiz", "status": "ok"}
 
 
+@api.get("/health")
+async def health(session: AsyncSession = Depends(get_session)):
+    await session.execute(text("SELECT 1"))
+    sets = await session.scalar(select(func.count(QuestionSet.id)))
+    return {"status": "ok", "database": "postgresql", "question_sets": sets or 0}
+
+
 @api.post("/register")
 async def register(payload: RegisterIn, session: AsyncSession = Depends(get_session)):
     email = payload.email.lower().strip()

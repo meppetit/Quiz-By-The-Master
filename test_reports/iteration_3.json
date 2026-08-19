@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 3 regression after MongoDB removal + PostgreSQL URL normalisation. All 38 pytest tests pass (21 backend_test + 7 test_health_check + 10 NEW test_db_url covering _build_url_and_args + Mongo-absence guard). GET /api/ and GET /api/health both OK (health: {status:ok, database:postgresql, question_sets:20}). Grep confirms no motor/pymongo/MONGO_URL/DB_NAME references remain in backend code or requirements.txt. Health-check warnings/issues split verified live: adding a 21st question to set 1 -> ready=true with warning '21 questions — only the first 20 will be served'; deleting to 19 -> ready=false with issue 'Only 19 of 20 questions'; restore -> ready=true. Full participant flow at 390x844 passed (empty submit stays on form via HTML5 required, valid registration reached /quiz, all 20 questions answered, Finish redirected to /completion, Thanks-for-participating card rendered). Admin flow at 1600x900 passed: login via admin/mepquiz2026, all 5 tabs render, Set health shows 19 READY + 1 CHECK (set 20 legacy duplicates from iter_2), Live view opens with leaderboard + live-total=42, Exit returns to /admin.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_health_check.py",
+    "/app/backend/tests/test_db_url.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "db.py: connect_args uses ssl.CERT_NONE + check_hostname=False for all remote hosts — pragmatic for Neon/Supabase self-signed chains but disables cert validation entirely. If a real CA-signed managed Postgres is used in prod, prefer ssl.create_default_context() without disabling verification when sslmode=require (only fall back to CERT_NONE for sslmode=verify-full failures). Low priority for a self-hosted quiz app but worth a comment.",
+    "db.py: DATABASE_URL is read at import time via os.environ['DATABASE_URL'] (KeyError with no message if unset). A clearer RuntimeError('DATABASE_URL is required') would help ops.",
+    "server.py: readiness sums >20-question sets into `warnings` but still ranks event_ready=True — good split. However, if a set has both a warning (>20) AND an unrelated issue (duplicates), it shows in `issues` alone; the split is orthogonal. No bug, just noting.",
+    "server.py health endpoint at /api/health is unauthenticated — fine for a liveness probe, but it exposes total set count. Not a security concern for this app.",
+    "seed.py + startup: seed runs on every startup — idempotent seeders should log a summary. Low priority."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_db_url.py (new — 10 unit tests for _build_url_and_args + Mongo-absence guard)"
+  ],
+  "success_rate": {"backend": "100% (38/38 pytest)", "frontend": "100% of listed flows"},
+  "test_credentials": "admin / mepquiz2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Participant flow registered one new participant test_<rand>@ex.com and completed a run (42 participants total, one completed). Health-check probing added qid 446 to set 1 (deleted immediately) and qid 447 (re-created as replacement for the question deleted during the not-ready test; renamed to 'Placeholder question restored by tester' with correct_option=A). Set 1 remains at 20 questions and READY. Set 20 still carries the iteration_2 legacy state (24 questions + 2 duplicates -> single CHECK).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests now split across three files under /app/backend/tests/: backend_test.py, test_health_check.py, test_db_url.py. Run with `-n 0` (pytest.ini pins loadscope) and export REACT_APP_BACKEND_URL from /app/frontend/.env before running because the health/backend integration tests read it from env. test_db_url.py is fully offline (no HTTP). Set 20 remains 'dirty' (24 questions with duplicates) — this is intentional and asserted around in test_health_check.py. Set 1 contains one tester-authored placeholder question at order_index near the end; content is valid but not the original seed text.",
+  "rca of the issue": "N/A — deployment fix (drop MONGO_URL/DB_NAME from .env, remove motor/pymongo from requirements, normalise DATABASE_URL for asyncpg, add GET /api/health) verified end-to-end. No functional regressions found."
+}
