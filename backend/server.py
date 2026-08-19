@@ -364,6 +364,56 @@ async def admin_leaderboard(
     ]
 
 
+@api.get("/admin/health-check")
+async def admin_health_check(admin: str = Depends(require_admin), session: AsyncSession = Depends(get_session)):
+    """Pre-event readiness: flags sets missing questions, options or correct answers."""
+    res = await session.execute(select(QuestionSet).order_by(QuestionSet.id))
+    sets = res.scalars().all()
+    report = []
+    for qs in sets:
+        qres = await session.execute(
+            select(Question).where(Question.set_id == qs.id).order_by(Question.order_index, Question.id)
+        )
+        questions = qres.scalars().all()
+        issues, warnings = [], []
+        if len(questions) < TOTAL_QUESTIONS:
+            issues.append(f"Only {len(questions)} of {TOTAL_QUESTIONS} questions")
+        elif len(questions) > TOTAL_QUESTIONS:
+            warnings.append(f"{len(questions)} questions — only the first {TOTAL_QUESTIONS} will be served")
+        for i, q in enumerate(questions, start=1):
+            opts = q.options or {}
+            missing = [l for l in ("A", "B", "C", "D") if not str(opts.get(l, "")).strip()]
+            if missing:
+                issues.append(f"Q{i}: missing option {', '.join(missing)}")
+            if q.correct_option not in ("A", "B", "C", "D"):
+                issues.append(f"Q{i}: invalid correct answer")
+            elif not str(opts.get(q.correct_option, "")).strip():
+                issues.append(f"Q{i}: correct answer {q.correct_option} has no text")
+            if not (q.question_text or "").strip():
+                issues.append(f"Q{i}: empty question text")
+        texts = [(q.question_text or "").strip().lower() for q in questions]
+        dupes = {t for t in texts if t and texts.count(t) > 1}
+        if dupes:
+            issues.append(f"{len(dupes)} duplicate question text(s)")
+        report.append({
+            "set_id": qs.id,
+            "name": qs.name,
+            "question_count": len(questions),
+            "attempt_count": qs.attempt_count,
+            "ready": not issues,
+            "issues": issues,
+            "warnings": warnings,
+        })
+    ready_sets = sum(1 for r in report if r["ready"])
+    return {
+        "total_sets": len(report),
+        "ready_sets": ready_sets,
+        "blocked_sets": len(report) - ready_sets,
+        "event_ready": ready_sets == len(report) and len(report) > 0,
+        "sets": report,
+    }
+
+
 @api.get("/admin/export.csv")
 async def admin_export(admin: str = Depends(require_admin), session: AsyncSession = Depends(get_session)):
     rows = await _rows(session, "", "created_at", "asc")

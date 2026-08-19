@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 2 testing of MEP Quiz follow-up features: Live leaderboard (/admin/live), Set Health check (tab-readiness + GET /api/admin/health-check), and regressions from iteration_1. Added /app/backend/tests/test_health_check.py (7 tests) covering auth, seeded-all-ready shape, deletion flagging + restore-to-ready, duplicate question text flagging, and PUT validation with blank/missing option. Full pytest run: 28/28 passing (21 original + 7 new). Playwright at 1600x900 verified: live-view-btn on dashboard, /admin/live redirects to /admin/login without token AND with invalid/expired token (401), fullscreen-btn + exit-live-btn render, Set health tab renders 20 cards, and auto-refresh worked (Players count went 41 -> 42 within ~5s after a new registration via in-page fetch).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/health-check", "issue": "Any set with >20 questions is flagged as CHECK (ready=False) via 'N questions — only the first 20 will be served'. This is technically informational (server only serves first 20), but by mixing it into the same `issues` list it downgrades the set to blocked. Consider splitting into `warnings` vs blocking `issues`, or make >20 a warning that keeps ready=True."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminLogin", "issues": ["Username/password inputs have no name attribute and Sign in button has no type='submit' — makes automated testing slightly harder; not user-visible."]},
+      {"screen": "LiveLeaderboard header", "issues": ["Players/Avg score cards show em-dash '—' momentarily until stats API resolves; harmless flash but could show 0/loading skeleton for polish."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_health_check.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: split health-check output into warnings vs blocking issues so a set with >20 questions (bulk import residue) does not appear as CHECK on the readiness screen.",
+    "Optional polish: add name/type attributes on AdminLogin form fields and show 0 instead of em-dash while live stats are loading."
+  ],
+  "critical_code_review_comments": [
+    "server.py admin_health_check(): the >TOTAL_QUESTIONS branch marks the set as not ready — depending on product intent this is either a feature (over-provisioned sets flagged) or a small bug (extras are ignored at serve time anyway). Consider a separate `warnings` field.",
+    "LiveLeaderboard.jsx: polling every 5s via setInterval is fine for a big-screen view but there is no pause when the tab is hidden — could hammer the API for hours during a long event. document.visibilityState check would save some load.",
+    "ReadinessPanel.jsx: single load() call on mount + manual Re-check button; consider auto-polling (say every 30s) so admins see live changes as they edit questions.",
+    "server.py duplicate detection compares full text case-insensitively but does not normalise punctuation/whitespace beyond .strip().lower() — near-duplicates ('What is 2+2?' vs 'What is 2+2 ?') would not be caught. Low priority.",
+    "auth.py + register(): retry/backoff on FOR UPDATE SKIP LOCKED confirmed working under a 35-request burst (max skew 1). Good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_health_check.py (new)"
+  ],
+  "success_rate": {"backend": "100% (28/28 pytest)", "frontend": "100% of listed flows"},
+  "test_credentials": "admin / mepquiz2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "test_health_check.py briefly deletes and re-adds one question in set 10 and adds+removes a duplicate in set 11 (self-cleaning). Playwright registered one TEST_lr_* participant on set 2 to verify auto-refresh. Cumulative regression state after this run: set 20 has ~24 questions (from bulk-import parser test running twice) and contains 2 duplicate texts, so it is legitimately flagged as CHECK in health-check.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests split across two files: /app/backend/tests/backend_test.py (iteration_1) + /app/backend/tests/test_health_check.py (iteration_2). pytest.ini pins -n 2 --dist loadscope; run serial with `-n 0` because several tests use /api/admin/reset-attempts. Set 20 is intentionally 'dirty' after a full run (bulk import + duplicate) — test_shape_and_seeded_all_ready explicitly excludes set 20 from the strict all-ready assertion. Live leaderboard poll interval is 5s. Data-testids used: live-view-btn, tab-readiness, readiness-panel, readiness-refresh, readiness-set-<id>, live-leaderboard, live-total, live-rows, fullscreen-btn, exit-live-btn.",
+  "rca of the issue": "N/A — no functional bugs found. One product-intent question flagged (see minor list) around treating >20 questions as blocking vs warning."
+}

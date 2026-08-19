@@ -25,6 +25,10 @@ Server-side scoring/time, no answer leakage, one attempt per person, least-loade
 - Design implemented from screenshots: near-black + lime (#C6F24E), Outfit/DM Sans, grid texture.
 - QA: 21/21 backend pytest + full Playwright participant & admin flows passing (`/app/test_reports/iteration_1.json`).
 
+- **Set health**: pre-event checklist endpoint `/api/admin/health-check` + admin tab flagging sets with missing questions, missing/blank options, invalid correct answers or duplicate texts (over-provisioned sets are a warning, not a blocker).
+- **Live leaderboard**: `/admin/live` full-screen projector view, ranked score/time rows, 5s auto-refresh (paused when tab hidden), native fullscreen toggle.
+- **Deployment**: `/app/DEPLOYMENT.md` guide + `/app/deploy/` (docker-compose with tuned Postgres + PgBouncer transaction pooling, gunicorn/uvicorn 4-worker backend image, nginx with rate-limited `/api/register` and static caching).
+
 ## Backlog
 - P0: import the real 400-question document (20 sets × 20) via the admin paste/upload panel; then remove seeded placeholders.
 - P1: deployment hardening for the burst (multiple uvicorn workers/replicas, PgBouncer, explicit CORS origins instead of `*`).
@@ -32,5 +36,5 @@ Server-side scoring/time, no answer leakage, one attempt per person, least-loade
 - P2: per-set analytics (hardest questions), admin ability to reorder questions, rate limiting on /api/register.
 
 ## Next tasks
-1. Get the 400-question document and bulk-import it per set.
-2. Deployment config + load test at expected peak concurrency.
+1. Get the 400-question document and bulk-import it per set, then re-run Set health.
+2. Deploy with `/app/deploy/docker-compose.yml` (see DEPLOYMENT.md) and load test at expected peak concurrency.

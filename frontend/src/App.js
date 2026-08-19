@@ -4,6 +4,7 @@ import Quiz from "@/pages/Quiz";
 import Completion from "@/pages/Completion";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
+import LiveLeaderboard from "@/pages/LiveLeaderboard";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/completion" element={<Completion />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/live" element={<LiveLeaderboard />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

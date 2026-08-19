@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowUpDown, Download, ListChecks, LogOut, RefreshCw, Trophy, Users, Timer, Target, Percent,
+  ArrowUpDown, Download, ListChecks, LogOut, Monitor, RefreshCw, Trophy, Users, Timer, Target, Percent,
 } from "lucide-react";
 import { API, api, errText, fmtTime } from "../lib/api";
 import QuestionManager from "./QuestionManager";
+import ReadinessPanel from "./ReadinessPanel";
 
 const TABS = [
   { key: "overview", label: "Overview" },
   { key: "participants", label: "Participants" },
   { key: "leaderboard", label: "Leaderboard" },
   { key: "questions", label: "Questions" },
+  { key: "readiness", label: "Set health" },
 ];
 
 const COLUMNS = [
@@ -110,6 +112,9 @@ export default function AdminDashboard() {
             <h1 className="font-display text-3xl font-black tracking-tight text-white">Control room</h1>
           </div>
           <div className="flex items-center gap-3">
+            <button data-testid="live-view-btn" onClick={() => navigate("/admin/live")} className="flex h-10 items-center gap-2 rounded-full border border-[#c6f24e]/40 bg-[#c6f24e]/10 px-4 text-sm font-bold text-[#c6f24e] transition-colors hover:bg-[#c6f24e]/20">
+              <Monitor className="h-4 w-4" /> Live view
+            </button>
             <button data-testid="refresh-btn" onClick={loadAll} className="flex h-10 items-center gap-2 rounded-full border border-zinc-800 bg-[#121214] px-4 text-sm text-zinc-300 transition-colors hover:bg-zinc-800">
               <RefreshCw className="h-4 w-4" /> Refresh
             </button>
@@ -234,6 +239,8 @@ export default function AdminDashboard() {
         )}
 
         {tab === "questions" && <QuestionManager onUnauthorized={logout} />}
+
+        {tab === "readiness" && <ReadinessPanel onUnauthorized={logout} />}
       </div>
     </div>
   );

@@ -38,13 +38,13 @@ export default function AdminLogin() {
         <p className="mt-2 text-sm text-zinc-500">MEP Quiz control room.</p>
 
         <label className="mep-label mt-7 block">Username</label>
-        <input data-testid="admin-username" className="mep-input mt-2" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
+        <input data-testid="admin-username" name="username" className="mep-input mt-2" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
         <label className="mep-label mt-5 block">Password</label>
-        <input data-testid="admin-password" type="password" className="mep-input mt-2" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+        <input data-testid="admin-password" name="password" type="password" className="mep-input mt-2" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
 
         {error && <p data-testid="admin-login-error" className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>}
 
-        <button data-testid="admin-login-btn" className="mep-btn mt-6" disabled={busy}>
+        <button data-testid="admin-login-btn" type="submit" className="mep-btn mt-6" disabled={busy}>
           {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Sign in"}
         </button>
       </form>
