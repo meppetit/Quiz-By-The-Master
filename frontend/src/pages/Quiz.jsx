@@ -18,6 +18,14 @@ export default function Quiz() {
   const [error, setError] = useState("");
   const loading = useRef(false);
 
+  const applyQuestion = useCallback((data) => {
+    setQ(data.question);
+    setIndex(data.index);
+    setTotal(data.total_questions);
+    setElapsed(data.elapsed_seconds);
+    setSelected(null);
+  }, []);
+
   const load = useCallback(async () => {
     if (loading.current) return;
     loading.current = true;
@@ -27,17 +35,13 @@ export default function Quiz() {
         navigate("/completion", { replace: true });
         return;
       }
-      setQ(data.question);
-      setIndex(data.index);
-      setTotal(data.total_questions);
-      setElapsed(data.elapsed_seconds);
-      setSelected(null);
+      applyQuestion(data);
     } catch (e) {
       setError(errText(e));
     } finally {
       loading.current = false;
     }
-  }, [token, navigate]);
+  }, [token, navigate, applyQuestion]);
 
   useEffect(() => {
     if (!token) {
@@ -65,7 +69,8 @@ export default function Quiz() {
         navigate("/completion", { replace: true });
         return;
       }
-      await load();
+      if (data.next) applyQuestion(data.next);
+      else await load();
     } catch (e) {
       setError(errText(e));
     } finally {

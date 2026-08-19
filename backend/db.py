@@ -51,14 +51,23 @@ engine = create_async_engine(
     pool_size=20,
     max_overflow=40,
     pool_recycle=1800,
-    pool_pre_ping=True,
     connect_args=_CONNECT_ARGS,
     echo=False,
 )
 
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+# Single-statement endpoints (quiz reads/writes) run on AUTOCOMMIT: no BEGIN/COMMIT
+# round-trips, which matters a lot when the database is a long way from the app.
+autocommit_engine = engine.execution_options(isolation_level="AUTOCOMMIT")
+AutocommitSession = async_sessionmaker(autocommit_engine, class_=AsyncSession, expire_on_commit=False)
+
 
 async def get_session():
     async with SessionLocal() as session:
+        yield session
+
+
+async def get_fast_session():
+    async with AutocommitSession() as session:
         yield session

@@ -107,22 +107,23 @@ class TestRegistration:
 class TestSetAssignment:
     def test_sequential_least_loaded(self, admin_headers):
         # After reset (session scoped), register N to observe spread.
-        # NOTE: we cannot re-reset here because other tests already added ~4 registrations.
-        # So do a fresh admin reset then run.
+        # NOTE: another xdist worker may run concurrent registrations against
+        # the same preview backend; we tolerate that by scoping the assertion
+        # to just the participants we register in this test.
         requests.post(f"{API}/admin/reset-attempts", headers=admin_headers)
+        my_set_names = []
         for _ in range(20):
             r = requests.post(f"{API}/register", json={
                 "name": "Seq User", "email": f"TEST_seq_{_rand_suffix()}@x.com", "phone": _phone()
             })
             assert r.status_code == 200, r.text
+            my_set_names.append(r.json()["set_name"])
         sets = requests.get(f"{API}/admin/sets", headers=admin_headers).json()
-        counts = [s["attempt_count"] for s in sets]
         qcs = [s["question_count"] for s in sets]
         # every set should still have at least 20 questions
         assert all(q >= 20 for q in qcs), qcs
-        # 20 attempts across 20 sets - should be exactly 1 each
-        assert max(counts) - min(counts) <= 1, counts
-        assert sum(counts) == 20
+        # 20 registrations should have been spread across 20 distinct sets
+        assert len(set(my_set_names)) == 20, my_set_names
 
 
 # --------------- Concurrency burst ---------------
@@ -203,30 +204,24 @@ class TestQuizFlow:
         assert r.status_code == 400
 
     def test_full_run_scoring_and_completion(self, admin_headers):
+        # Build id->correct map BEFORE registering so the server-side started_at
+        # timer only covers the answer loop (fair comparison with wall-clock).
+        id_to_correct = {}
+        for s in requests.get(f"{API}/admin/sets", headers=admin_headers).json():
+            qs = requests.get(f"{API}/admin/sets/{s['id']}/questions", headers=admin_headers).json()
+            for q in qs:
+                id_to_correct[q["id"]] = q["correct_option"]
+
         my_email = f"TEST_full_{_rand_suffix()}@example.com"
+        started = time.time()
         r = requests.post(f"{API}/register", json={
             "name": "Full Runner", "email": my_email, "phone": _phone()
         })
         assert r.status_code == 200
         token = r.json()["attempt_token"]
-        # Determine set questions via admin (with correct answers) to answer correctly for 5 questions
-        state = requests.get(f"{API}/attempt/{token}/question").json()
-        # find set id via participant listing
-        parts = requests.get(f"{API}/admin/participants", headers=admin_headers).json()
-        # find latest with matching (we identify by set name from a state-less approach: just iterate)
-        # Simpler: iterate over each question shown, look up its correct_option via admin question list of any set.
-        # We'll first fetch all questions from all sets & build id->correct map.
-        id_to_correct = {}
-        set_of_qid = {}
-        for s in requests.get(f"{API}/admin/sets", headers=admin_headers).json():
-            qs = requests.get(f"{API}/admin/sets/{s['id']}/questions", headers=admin_headers).json()
-            for q in qs:
-                id_to_correct[q["id"]] = q["correct_option"]
-                set_of_qid[q["id"]] = s["id"]
 
         correct_answers = 0
         wrong_answers = 0
-        started = time.time()
         for i in range(20):
             resp = requests.get(f"{API}/attempt/{token}/question").json()
             if resp.get("completed"):
@@ -257,10 +252,20 @@ class TestQuizFlow:
         assert 0 <= my_row["time_taken_seconds"] <= int(elapsed) + 5
 
     def test_duplicate_answer_rejected(self):
-        token = _register()
-        q = requests.get(f"{API}/attempt/{token}/question").json()["question"]
+        # Retry once in case a concurrent worker resets participants between register+GET.
+        for _ in range(3):
+            token = _register()
+            gq = requests.get(f"{API}/attempt/{token}/question")
+            if gq.status_code == 200:
+                break
+        assert gq.status_code == 200, gq.text
+        q = gq.json()["question"]
         r1 = requests.post(f"{API}/attempt/{token}/answer", json={"question_id": q["id"], "selected_option": "A"})
-        assert r1.status_code == 200
+        assert r1.status_code == 200, r1.text
+        # new answer response should also carry `next` (or completed) per SQL rewrite
+        j1 = r1.json()
+        assert j1["answered"] == 1
+        assert "next" in j1 or j1.get("completed") is True
         r2 = requests.post(f"{API}/attempt/{token}/answer", json={"question_id": q["id"], "selected_option": "B"})
         assert r2.status_code == 409
 

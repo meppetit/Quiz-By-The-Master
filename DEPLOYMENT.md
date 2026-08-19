@@ -31,7 +31,15 @@ Registration is one short transaction, so a modest Postgres goes a long way. Add
 
 ---
 
-## 3. Environment variables
+## 2.5 Keep the app and the database in the same region (biggest speed factor)
+
+Every query costs one network round-trip. If the backend is in the US and the database is in Mumbai, that is ~450 ms **per query** and the quiz feels sluggish no matter how good the code is. In the same region it is ~1–5 ms.
+
+So: whatever host you pick, deploy the backend in the **same region as your Postgres** (e.g. Supabase Mumbai → Railway/Render/Fly region `ap-south-1` / Singapore as the nearest alternative). This single choice matters more than instance size.
+
+The app is already written to be round-trip frugal: registration, fetching a question and submitting an answer are each **one** database statement, and submitting an answer returns the next question in the same response, so each quiz screen costs one request.
+
+
 
 > Deploying on **Emergent**? Emergent provisions MongoDB only, so production must point at an external managed Postgres. Follow **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** (5 minutes, free) and set `DATABASE_URL` to the pooled connection string. The backend accepts plain `postgresql://` URLs and handles SSL and pooler settings for you. Nothing else in the app needs MongoDB — the Mongo variables have been removed from `backend/.env`.
 

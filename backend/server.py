@@ -10,6 +10,7 @@ import io
 import logging
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -22,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.cors import CORSMiddleware
 
 from auth import create_access_token, require_admin, verify_admin
-from db import SessionLocal, engine, get_session
+from db import SessionLocal, engine, get_fast_session, get_session
 from models import Answer, Attempt, Base, Participant, Question, QuestionSet
 from parser import parse_questions
 
@@ -108,6 +109,13 @@ class ImportIn(BaseModel):
 
 
 # ----------------------------- helpers -----------------------------
+def _valid_token(token: str) -> str:
+    try:
+        return str(uuid.UUID(token))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+
 async def load_attempt(session: AsyncSession, token: str) -> Attempt:
     try:
         res = await session.execute(select(Attempt).where(Attempt.token == token))
@@ -147,72 +155,93 @@ async def root():
 
 
 @api.get("/health")
-async def health(session: AsyncSession = Depends(get_session)):
-    await session.execute(text("SELECT 1"))
-    sets = await session.scalar(select(func.count(QuestionSet.id)))
+async def health(session: AsyncSession = Depends(get_fast_session)):
+    sets = await session.scalar(text("SELECT count(*) FROM question_sets"))
     return {"status": "ok", "database": "postgresql", "question_sets": sets or 0}
+
+
+# One statement: create the participant, pick the least-loaded set under a row lock,
+# bump its counter and open the attempt. Keeps registration to a single DB round-trip.
+REGISTER_SQL = text(
+    """
+    WITH new_participant AS (
+        INSERT INTO participants (name, email, phone, school, created_at)
+        VALUES (CAST(:name AS varchar(200)), CAST(:email AS varchar(255)), CAST(:phone AS varchar(30)), CAST(:school AS varchar(255)), now())
+        ON CONFLICT DO NOTHING
+        RETURNING id
+    ),
+    pick AS (
+        SELECT id, name FROM question_sets
+        WHERE id IN (SELECT set_id FROM questions GROUP BY set_id)
+          AND EXISTS (SELECT 1 FROM new_participant)
+        ORDER BY attempt_count ASC, id ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+    ),
+    bumped AS (
+        UPDATE question_sets SET attempt_count = attempt_count + 1
+        WHERE id = (SELECT id FROM pick)
+        RETURNING id
+    ),
+    new_attempt AS (
+        INSERT INTO attempts (token, participant_id, set_id, started_at)
+        SELECT gen_random_uuid(), np.id, p.id, now() FROM new_participant np, pick p
+        RETURNING token, started_at
+    )
+    SELECT (SELECT count(*) FROM new_participant) AS created,
+           (SELECT name FROM pick) AS set_name,
+           (SELECT token FROM new_attempt) AS token,
+           (SELECT started_at FROM new_attempt) AS started_at,
+           (SELECT count(*) FROM bumped) AS bumped
+    """
+)
 
 
 @api.post("/register")
 async def register(payload: RegisterIn, session: AsyncSession = Depends(get_session)):
     email = payload.email.lower().strip()
-    existing = await session.execute(
-        select(Participant).where((Participant.email == email) | (Participant.phone == payload.phone))
-    )
-    dup = existing.scalars().first()
-    if dup:
-        field = "email" if dup.email == email else "phone number"
-        raise HTTPException(status_code=409, detail=f"This {field} has already been used. One entry per person.")
+    params = {
+        "name": payload.name,
+        "email": email,
+        "phone": payload.phone,
+        "school": (payload.school or "").strip() or None,
+    }
 
-    participant = Participant(name=payload.name, email=email, phone=payload.phone,
-                              school=(payload.school or "").strip() or None)
-    session.add(participant)
-    try:
-        await session.flush()
-    except IntegrityError:
-        await session.rollback()
-        raise HTTPException(status_code=409, detail="This email or phone number has already been used.")
-
-    # Least-loaded set assignment, safe under concurrent bursts.
     row = None
     for attempt_no in range(40):
         if attempt_no:
             await asyncio.sleep(0.02)
-        res = await session.execute(
-            text(
-                "SELECT id, name FROM question_sets "
-                "WHERE id IN (SELECT DISTINCT set_id FROM questions) "
-                "ORDER BY attempt_count ASC, id ASC FOR UPDATE SKIP LOCKED LIMIT 1"
-            )
-        )
-        row = res.first()
-        if row:
+        row = (await session.execute(REGISTER_SQL, params)).first()
+        if row is None or not row.created or row.token is not None:
             break
-    if row is None:
+        # A set row was locked by a concurrent registration: roll back and retry.
+        await session.rollback()
+
+    if row is None or not row.created:
+        await session.rollback()
+        dup = (await session.execute(
+            select(Participant.email).where(
+                (Participant.email == email) | (Participant.phone == payload.phone)
+            ).limit(1)
+        )).scalar_one_or_none()
+        field = "email" if dup == email else "phone number"
+        raise HTTPException(status_code=409, detail=f"This {field} has already been used. One entry per person.")
+
+    if row.token is None:
         await session.rollback()
         raise HTTPException(status_code=503, detail="No question sets available. Please contact the organisers.")
 
-    await session.execute(
-        update(QuestionSet).where(QuestionSet.id == row[0]).values(attempt_count=QuestionSet.attempt_count + 1)
-    )
-    attempt = Attempt(participant_id=participant.id, set_id=row[0])
-    session.add(attempt)
-    try:
-        await session.commit()
-    except IntegrityError:
-        await session.rollback()
-        raise HTTPException(status_code=409, detail="This email or phone number has already been used.")
-    await session.refresh(attempt)
+    await session.commit()
     return {
-        "attempt_token": str(attempt.token),
-        "set_name": row[1],
+        "attempt_token": str(row.token),
+        "set_name": row.set_name,
         "total_questions": TOTAL_QUESTIONS,
-        "started_at": attempt.started_at.isoformat(),
+        "started_at": row.started_at.isoformat(),
     }
 
 
 @api.get("/attempt/{token}/state")
-async def attempt_state(token: str, session: AsyncSession = Depends(get_session)):
+async def attempt_state(token: str, session: AsyncSession = Depends(get_fast_session)):
     attempt = await load_attempt(session, token)
     count = await answered_count(session, attempt.id)
     total = await session.scalar(select(func.count(Question.id)).where(Question.set_id == attempt.set_id))
@@ -224,62 +253,124 @@ async def attempt_state(token: str, session: AsyncSession = Depends(get_session)
     }
 
 
-@api.get("/attempt/{token}/question")
-async def current_question(token: str, session: AsyncSession = Depends(get_session)):
-    attempt = await load_attempt(session, token)
-    if attempt.completed_at is not None:
-        return {"completed": True}
-    idx = await answered_count(session, attempt.id)
-    res = await session.execute(
-        select(Question)
-        .where(Question.set_id == attempt.set_id)
-        .order_by(Question.order_index, Question.id)
-        .offset(idx)
-        .limit(1)
+# One statement: attempt state, answers already given and the next unanswered question.
+NEXT_QUESTION_SQL = text(
+    """
+    WITH a AS (
+        SELECT id, set_id, started_at, completed_at,
+               (SELECT count(*) FROM answers WHERE attempt_id = attempts.id) AS answered
+        FROM attempts WHERE token = CAST(:token AS uuid)
     )
-    q = res.scalar_one_or_none()
-    if q is None:
-        await finalize(session, attempt)
-        return {"completed": True}
+    SELECT a.completed_at, a.answered,
+           EXTRACT(EPOCH FROM (now() - a.started_at))::int AS elapsed,
+           q.id AS qid, q.question_text, q.options, q.category
+    FROM a
+    LEFT JOIN LATERAL (
+        SELECT id, question_text, options, category FROM questions
+        WHERE set_id = a.set_id ORDER BY order_index, id
+        OFFSET a.answered LIMIT 1
+    ) q ON true
+    """
+)
+
+# One statement: record the answer (grading in SQL), then hand back the next question.
+ANSWER_SQL = text(
+    """
+    WITH a AS (
+        SELECT id, set_id, started_at, completed_at,
+               (SELECT count(*) FROM answers WHERE attempt_id = attempts.id) AS answered
+        FROM attempts WHERE token = CAST(:token AS uuid)
+    ),
+    target AS (
+        SELECT q.id FROM questions q, a
+        WHERE q.id = :qid AND q.set_id = a.set_id AND a.completed_at IS NULL
+    ),
+    ins AS (
+        INSERT INTO answers (attempt_id, question_id, selected_option, is_correct, created_at)
+        SELECT a.id, t.id, CAST(:choice AS varchar(4)), (q.correct_option = CAST(:choice AS varchar(4))), now()
+        FROM a, target t JOIN questions q ON q.id = t.id
+        ON CONFLICT (attempt_id, question_id) DO NOTHING
+        RETURNING id
+    )
+    SELECT a.completed_at,
+           (SELECT count(*) FROM target) AS valid_question,
+           (SELECT count(*) FROM ins) AS inserted,
+           a.answered + (SELECT count(*) FROM ins) AS answered,
+           EXTRACT(EPOCH FROM (now() - a.started_at))::int AS elapsed,
+           q.id AS qid, q.question_text, q.options, q.category
+    FROM a
+    LEFT JOIN LATERAL (
+        SELECT id, question_text, options, category FROM questions
+        WHERE set_id = a.set_id ORDER BY order_index, id
+        OFFSET a.answered + 1 LIMIT 1
+    ) q ON true
+    """
+)
+
+FINALIZE_SQL = text(
+    """
+    UPDATE attempts SET
+        completed_at = now(),
+        time_taken_seconds = EXTRACT(EPOCH FROM (now() - started_at))::int,
+        score = (SELECT count(*) FROM answers WHERE attempt_id = attempts.id AND is_correct)
+    WHERE token = CAST(:token AS uuid) AND completed_at IS NULL
+    """
+)
+
+
+def _question_payload(row, index: int):
     return {
         "completed": False,
         "question": {
-            "id": q.id,
-            "question_text": q.question_text,
-            "options": q.options,
-            "category": q.category,
+            "id": row.qid,
+            "question_text": row.question_text,
+            "options": row.options,
+            "category": row.category,
         },
-        "index": idx + 1,
+        "index": index,
         "total_questions": TOTAL_QUESTIONS,
-        "elapsed_seconds": elapsed_seconds(attempt),
+        "elapsed_seconds": row.elapsed,
     }
 
 
+@api.get("/attempt/{token}/question")
+async def current_question(token: str, session: AsyncSession = Depends(get_fast_session)):
+    row = (await session.execute(NEXT_QUESTION_SQL, {"token": _valid_token(token)})).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if row.completed_at is not None:
+        return {"completed": True}
+    if row.qid is None:
+        await session.execute(FINALIZE_SQL, {"token": token})
+        return {"completed": True}
+    return _question_payload(row, row.answered + 1)
+
+
 @api.post("/attempt/{token}/answer")
-async def submit_answer(token: str, payload: AnswerIn, session: AsyncSession = Depends(get_session)):
-    attempt = await load_attempt(session, token)
-    if attempt.completed_at is not None:
+async def submit_answer(token: str, payload: AnswerIn, session: AsyncSession = Depends(get_fast_session)):
+    row = (await session.execute(ANSWER_SQL, {
+        "token": _valid_token(token),
+        "qid": payload.question_id,
+        "choice": payload.selected_option,
+    })).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if row.completed_at is not None:
         raise HTTPException(status_code=409, detail="This attempt is already complete.")
-    q = await session.get(Question, payload.question_id)
-    if q is None or q.set_id != attempt.set_id:
+    if not row.valid_question:
         raise HTTPException(status_code=400, detail="Question does not belong to this attempt.")
-    session.add(Answer(
-        attempt_id=attempt.id,
-        question_id=q.id,
-        selected_option=payload.selected_option,
-        is_correct=payload.selected_option == q.correct_option,
-    ))
-    try:
-        await session.commit()
-    except IntegrityError:
-        await session.rollback()
+    if not row.inserted:
         raise HTTPException(status_code=409, detail="This question has already been answered.")
-    count = await answered_count(session, attempt.id)
-    total = await session.scalar(select(func.count(Question.id)).where(Question.set_id == attempt.set_id))
-    done = count >= min(total or 0, TOTAL_QUESTIONS)
+
+    done = row.answered >= TOTAL_QUESTIONS or row.qid is None
     if done:
-        await finalize(session, attempt)
-    return {"answered": count, "completed": done}
+        await session.execute(FINALIZE_SQL, {"token": token})
+        return {"answered": row.answered, "completed": True}
+    return {
+        "answered": row.answered,
+        "completed": False,
+        "next": _question_payload(row, row.answered + 1),
+    }
 
 
 # ----------------------------- admin -----------------------------
