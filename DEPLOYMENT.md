@@ -85,6 +85,9 @@ docker compose -f deploy/docker-compose.yml up -d --scale backend=3
 
 ## 5. Option B — Managed platform (least ops work)
 
+> **Using Vercel + Render?** Follow the dedicated step-by-step guide: **[DEPLOY_VERCEL_RENDER.md](./DEPLOY_VERCEL_RENDER.md)** (includes every env var, the SPA rewrite, scaling table and a troubleshooting matrix). `render.yaml` and `frontend/vercel.json` are already in the repo.
+
+
 1. **Database**: create a managed Postgres (Neon, Supabase, RDS, Railway). Turn on connection pooling and use the *pooled* connection string.
 2. **Backend**: deploy `/app/backend` to Render/Railway/Fly with start command:
    ```
